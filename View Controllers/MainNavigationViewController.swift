@@ -9,6 +9,9 @@ final class MainNavigationViewController: UITabBarController {
   private let rootViewModel: RootViewModel
   private var cancellables = Set<AnyCancellable>()
 
+  private var newStatusButtonView: NewStatusButtonView?
+  private var newStatusButtonConstraints: [NSLayoutConstraint] = []
+    
   init(viewModel: NavigationViewModel, rootViewModel: RootViewModel) {
     self.viewModel = viewModel
     self.rootViewModel = rootViewModel
@@ -67,6 +70,27 @@ final class MainNavigationViewController: UITabBarController {
 
     viewModel.refreshIdentity()
   }
+    
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        installNewStatusButtonBottomConstraintIfNeeded()
+    }
+    
+    private func installNewStatusButtonBottomConstraintIfNeeded() {
+        guard let button = newStatusButtonView, newStatusButtonConstraints.isEmpty else { return }
+
+        let constraint: NSLayoutConstraint
+        if tabBar.isDescendant(of: view) {
+            constraint = button.bottomAnchor.constraint(equalTo: tabBar.topAnchor,
+                                                        constant: -.defaultSpacing * 2)
+        } else {
+            // Tab bar isn't in our hierarchy (floating/hosted elsewhere): fall back to the safe area.
+            constraint = button.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor,
+                                                        constant: -(tabBar.frame.height + .defaultSpacing * 2))
+        }
+        constraint.isActive = true
+        newStatusButtonConstraints = [constraint]
+    }
 }
 
 extension MainNavigationViewController: UITabBarControllerDelegate {
@@ -147,6 +171,9 @@ extension MainNavigationViewController {
       setupNewStatusButton()
     } else {
       tabBar.isHidden = true
+        newStatusButtonView?.removeFromSuperview()
+        newStatusButtonView = nil
+        newStatusButtonConstraints = []
     }
 
     let secondaryNavigationButton = SecondaryNavigationButton(viewModel: viewModel, rootViewModel: rootViewModel)
@@ -158,67 +185,39 @@ extension MainNavigationViewController {
     viewControllers = controllers.map(SwipeableNavigationController.init(rootViewController:))
   }
 
-  fileprivate func setupNewStatusButton() {
-    let newStatusButtonView = NewStatusButtonView(
-      primaryAction: UIAction { [weak self] _ in
-        guard let self = self else { return }
+    func setupNewStatusButton() {
+        guard newStatusButtonView == nil else { return }   // also prevents duplicate buttons
 
-        self.viewModel.presentedComposeStatusViewModel =
-          self.rootViewModel.composeStatusViewModel(identityContext: self.viewModel.identityContext)
-      }
-    )
+        let button = NewStatusButtonView(primaryAction: UIAction { [weak self] _ in
+            guard let self = self else { return }
+            self.viewModel.presentedComposeStatusViewModel =
+                self.rootViewModel.composeStatusViewModel(identityContext: self.viewModel.identityContext)
+        })
+        button.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(button)
+        newStatusButtonView = button
 
-    view.addSubview(newStatusButtonView)
-    newStatusButtonView.translatesAutoresizingMaskIntoConstraints = false
-
-    viewModel.identityContext.$appPreferences.map(\.statusWord).removeDuplicates()
-      .sink {
-        switch $0 {
-        case .toot:
-          newStatusButtonView.button.accessibilityLabel =
-            NSLocalizedString("compose-button.accessibility-label.toot", comment: "")
-        case .post:
-          newStatusButtonView.button.accessibilityLabel =
-            NSLocalizedString("compose-button.accessibility-label.post", comment: "")
+        viewModel.identityContext.$appPreferences.map(\.statusWord).removeDuplicates().sink {
+            switch $0 {
+            case .toot:
+                button.button.accessibilityLabel =
+                    NSLocalizedString("compose-button.accessibility-label.toot", comment: "")
+            case .post:
+                button.button.accessibilityLabel =
+                    NSLocalizedString("compose-button.accessibility-label.post", comment: "")
+            }
         }
-      }
-      .store(in: &cancellables)
+        .store(in: &cancellables)
 
-    let bottomConstraint: NSLayoutConstraint
-    let trailingConstant: CGFloat
-    let isiPadOS18OrHigher =
-      if #available(iOS 18.0, *) {
-        UIDevice.current.userInterfaceIdiom == .pad
-      } else {
-        false
-      }
-    if isiPadOS18OrHigher {
-      // iOS 18 moves the tab bar to the top on iPads,
-      // which resulted in a crash due to the button and the tab bar not having a common ancestor.
-      bottomConstraint = newStatusButtonView.bottomAnchor.constraint(
-        equalTo: view.safeAreaLayoutGuide.bottomAnchor,
-        constant: -.defaultSpacing * 2
-      )
-      trailingConstant = -.defaultSpacing * 4.5
-    } else {
-      // Original constraints, still valid on iPhones and older iPads.
-      bottomConstraint = newStatusButtonView.bottomAnchor.constraint(
-        equalTo: tabBar.topAnchor,
-        constant: -.defaultSpacing * 2
-      )
-      trailingConstant = -.defaultSpacing * 2
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: .newStatusButtonDimension),
+            button.heightAnchor.constraint(equalToConstant: .newStatusButtonDimension),
+            button.trailingAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+                constant: -.defaultSpacing * 2)
+        ])
+        // bottom constraint is installed in viewDidLayoutSubviews
     }
-
-    NSLayoutConstraint.activate([
-      newStatusButtonView.widthAnchor.constraint(equalToConstant: .newStatusButtonDimension),
-      newStatusButtonView.heightAnchor.constraint(equalToConstant: .newStatusButtonDimension),
-      newStatusButtonView.trailingAnchor.constraint(
-        equalTo: view.safeAreaLayoutGuide.trailingAnchor,
-        constant: trailingConstant
-      ),
-      bottomConstraint,
-    ])
-  }
 
   fileprivate func presentSecondaryNavigation() {
     if let presentedViewController = presentedViewController {
