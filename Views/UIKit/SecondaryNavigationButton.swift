@@ -16,10 +16,23 @@ final class SecondaryNavigationButton: UIBarButtonItem {
       primaryAction: UIAction { _ in viewModel.presentingSecondaryNavigation = true }
     )
 
-    button.accessibilityLabel = NSLocalizedString("secondary-navigation-button.accessibility-title", comment: "")
-    button.imageView?.contentMode = .scaleAspectFill
-    button.layer.cornerRadius = .barButtonItemDimension / 2
-    button.clipsToBounds = true
+      button.accessibilityLabel = NSLocalizedString("secondary-navigation-button.accessibility-title", comment: "")
+      button.layer.cornerRadius = .barButtonItemDimension / 2
+      button.clipsToBounds = true
+
+      let avatarImageView = SDAnimatedImageView()
+
+      avatarImageView.translatesAutoresizingMaskIntoConstraints = false
+      avatarImageView.contentMode = .scaleAspectFill
+      avatarImageView.isUserInteractionEnabled = false  // let taps and long-press reach the button
+      button.addSubview(avatarImageView)
+
+      NSLayoutConstraint.activate([
+        avatarImageView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+        avatarImageView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+        avatarImageView.topAnchor.constraint(equalTo: button.topAnchor),
+        avatarImageView.bottomAnchor.constraint(equalTo: button.bottomAnchor),
+      ])
 
     customView = button
 
@@ -28,15 +41,28 @@ final class SecondaryNavigationButton: UIBarButtonItem {
       button.heightAnchor.constraint(equalToConstant: .barButtonItemDimension),
     ])
 
-    viewModel.identityContext.$identity
-      .sink {
-        button.sd_setImage(
-          with: $0.image,
-          for: .normal,
-          placeholderImage: UIImage(systemName: "line.horizontal.3")
-        )
-      }
-      .store(in: &cancellables)
+      viewModel.identityContext.$identity
+        .sink { identity in
+          avatarImageView.sd_setImage(
+            with: identity.image,
+            placeholderImage: UIImage(systemName: "line.horizontal.3")
+          )
+        }
+        .store(in: &cancellables)
+
+      viewModel.identityContext.$appPreferences
+        .map { $0.animateAvatars == .everywhere }
+        .removeDuplicates()
+        .sink { animate in
+          avatarImageView.autoPlayAnimatedImage = animate
+
+          if animate {
+            avatarImageView.startAnimating()
+          } else {
+            avatarImageView.stopAnimating()
+          }
+        }
+        .store(in: &cancellables)
 
     let imageTransformer = SDImageRoundCornerTransformer(
       radius: .greatestFiniteMagnitude,
