@@ -63,12 +63,17 @@ public final class Status: Codable, Identifiable {
   @DecodableDefault.EmptyList public private(set) var reactions: [Reaction]
   /// Used by 2023-07-22 Firefish and 2023-07-28 Akkoma.
   @DecodableDefault.EmptyList public private(set) var emojiReactions: [Reaction]
+  /// Pleroma API extensions. Pleroma and older Akkoma only report emoji reactions here.
+  public let pleroma: PleromaExtensions?
 
   public var unifiedReactions: [Reaction] {
     if !reactions.isEmpty {
       return reactions
     }
-    return emojiReactions
+    if !emojiReactions.isEmpty {
+      return emojiReactions
+    }
+    return pleroma?.emojiReactions ?? []
   }
 
   public init(
@@ -131,6 +136,7 @@ public final class Status: Codable, Identifiable {
     self.language = language
     self.text = text
     self.pinned = pinned
+    self.pleroma = nil
     self.repliesCount = repliesCount
     self.content = content
     self.favourited = favourited
@@ -139,6 +145,13 @@ public final class Status: Codable, Identifiable {
     self.bookmarked = bookmarked
     self.filtered = filtered
     self.reactions = reactions
+  }
+}
+
+extension Status {
+  /// - See: https://docs.pleroma.social/backend/development/API/differences_in_mastoapi_responses/#statuses
+  public struct PleromaExtensions: Codable, Hashable {
+    @DecodableDefault.EmptyList public private(set) var emojiReactions: [Reaction]
   }
 }
 
