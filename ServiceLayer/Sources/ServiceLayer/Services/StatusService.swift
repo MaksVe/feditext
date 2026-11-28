@@ -221,12 +221,23 @@ extension StatusService {
 
   public var canEditReactions: Bool { canEditReactionsGlitch || canEditReactionsPleroma }
 
+  /// Compatibility mode lets every endpoint through `canCallWith`, so pick the reaction API
+  /// by actual server capabilities first; otherwise Pleroma would get the Glitch endpoint and 404.
   private var canEditReactionsGlitch: Bool {
-    StatusEndpoint.react(id: "", name: "").canCallWith(mastodonAPIClient.apiCapabilities)
+    let endpoint = StatusEndpoint.react(id: "", name: "")
+    if endpoint.requires?.satisfiedBy(mastodonAPIClient.apiCapabilities) ?? false {
+      return true
+    }
+    return !pleromaReactionsSupported && endpoint.canCallWith(mastodonAPIClient.apiCapabilities)
   }
 
   private var canEditReactionsPleroma: Bool {
-    StatusEndpoint.pleromaReact(id: "", name: "").canCallWith(mastodonAPIClient.apiCapabilities)
+    pleromaReactionsSupported
+      || StatusEndpoint.pleromaReact(id: "", name: "").canCallWith(mastodonAPIClient.apiCapabilities)
+  }
+
+  private var pleromaReactionsSupported: Bool {
+    StatusEndpoint.pleromaReact(id: "", name: "").requires?.satisfiedBy(mastodonAPIClient.apiCapabilities) ?? false
   }
 
   public func addReaction(name: String) -> AnyPublisher<Never, Error> {
