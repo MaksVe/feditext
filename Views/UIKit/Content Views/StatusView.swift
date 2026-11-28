@@ -63,6 +63,15 @@ final class StatusView: UIView {
   private let avatarHeightConstraint: NSLayoutConstraint
   private let filterCloakView = UIView()
   private var filteredStatusConstraints = [NSLayoutConstraint]()
+  /// Thread line constraints, recreated on each configuration because moving the avatar between stack views drops them.
+  private var threadLineConstraints = [NSLayoutConstraint]()
+  /// Action button heights for the context parent and for other statuses. Created once and toggled, never re-added.
+  private lazy var contextParentButtonHeightConstraints = actionButtons.map {
+    $0.heightAnchor.constraint(equalToConstant: .minimumButtonDimension)
+  }
+  private lazy var buttonMinimumHeightConstraints = actionButtons.map {
+    $0.heightAnchor.constraint(greaterThanOrEqualToConstant: .minimumButtonDimension * 2 / 3)
+  }
   private let filterCloakStackView = UIStackView()
   private var filterCloakStackViewLeadingConstraint: NSLayoutConstraint!
   private let filterCloakImageView = UIImageView()
@@ -636,14 +645,18 @@ extension StatusView {
       sideStackView.insertArrangedSubview(avatarContainerView, at: 1)
     }
 
-    unfilteredStatusConstraints.append(contentsOf: [
+    // Replace, rather than accumulate, the thread line constraints from previous configurations.
+    NSLayoutConstraint.deactivate(threadLineConstraints)
+    unfilteredStatusConstraints.removeAll { constraint in threadLineConstraints.contains { $0 === constraint } }
+    threadLineConstraints = [
       inReplyToView.centerXAnchor.constraint(equalTo: avatarImageView.centerXAnchor),
       inReplyToView.topAnchor.constraint(equalTo: topAnchor),
       inReplyToView.bottomAnchor.constraint(equalTo: avatarImageView.topAnchor),
       hasReplyFollowingView.centerXAnchor.constraint(equalTo: avatarImageView.centerXAnchor),
       hasReplyFollowingView.topAnchor.constraint(equalTo: avatarImageView.bottomAnchor),
       hasReplyFollowingView.bottomAnchor.constraint(equalTo: bottomAnchor),
-    ])
+    ]
+    unfilteredStatusConstraints.append(contentsOf: threadLineConstraints)
 
     inReplyToView.isHidden = !viewModel.configuration.isReplyInContext || viewModel.shouldFilter
     hasReplyFollowingView.isHidden = !viewModel.configuration.hasReplyFollowing || viewModel.shouldFilter
@@ -802,16 +815,14 @@ extension StatusView {
 
     for button in actionButtons {
       button.contentHorizontalAlignment = isContextParent ? .center : .leading
+    }
 
-      if isContextParent {
-        button.heightAnchor.constraint(equalToConstant: .minimumButtonDimension).isActive = true
-      } else {
-        button.heightAnchor
-          .constraint(
-            greaterThanOrEqualToConstant: .minimumButtonDimension * 2 / 3
-          )
-          .isActive = true
-      }
+    if isContextParent {
+      NSLayoutConstraint.deactivate(buttonMinimumHeightConstraints)
+      NSLayoutConstraint.activate(contextParentButtonHeightConstraints)
+    } else {
+      NSLayoutConstraint.deactivate(contextParentButtonHeightConstraints)
+      NSLayoutConstraint.activate(buttonMinimumHeightConstraints)
     }
 
     setButtonImages(
