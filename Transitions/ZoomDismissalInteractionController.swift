@@ -4,21 +4,40 @@ import UIKit
 
 final class ZoomDismissalInteractionController: NSObject {
   var transitionContext: UIViewControllerContextTransitioning?
-  var animator: UIViewControllerAnimatedTransitioning?
+  var animator: UIViewControllerAnimatedTransitioning? {
+    didSet { gestureFinishedBeforeTransitionStarted = false }
+  }
 
   var fromReferenceViewFrame: CGRect?
   var toReferenceViewFrame: CGRect?
 
+  private var gestureFinishedBeforeTransitionStarted = false
+
   // swiftlint:disable:next function_body_length
   func didPanWith(gestureRecognizer: UIPanGestureRecognizer) {
-    guard let transitionContext = self.transitionContext,
-      let animator = self.animator as? ZoomAnimator,
+    let gestureFinished = [.ended, .cancelled, .failed].contains(gestureRecognizer.state)
+
+    guard let transitionContext = self.transitionContext else {
+      // The gesture can end before UIKit starts the interactive transition (e.g. a quick flick).
+      if gestureFinished { gestureFinishedBeforeTransitionStarted = true }
+
+      return
+    }
+
+    guard let animator = self.animator as? ZoomAnimator,
       let transitionView = animator.transitionView,
       let fromVC = transitionContext.viewController(forKey: .from),
       let toVC = transitionContext.viewController(forKey: .to),
       let fromReferenceView = animator.fromDelegate?.referenceView(for: animator),
       let fromReferenceViewFrame = self.fromReferenceViewFrame
-    else { return }
+    else {
+      // Never leave the transition running: its container view would block all touches on the screen below.
+      if gestureFinished {
+        endTransitionWithoutAnimation(transitionContext, cancelled: gestureRecognizer.state != .ended)
+      }
+
+      return
+    }
 
     let toReferenceView = animator.toDelegate?.referenceView(for: animator)
 
@@ -46,8 +65,8 @@ final class ZoomDismissalInteractionController: NSObject {
 
     toVC.tabBarController?.tabBar.alpha = 1 - backgroundAlpha
 
-    if gestureRecognizer.state == .ended {
-      if abs(anchorPoint.y - newCenter.y) < dismissThreshold {
+    if gestureFinished {
+      if gestureRecognizer.state != .ended || abs(anchorPoint.y - newCenter.y) < dismissThreshold {
         // cancel
         UIView.animate(
           withDuration: 0.5,
@@ -104,6 +123,27 @@ final class ZoomDismissalInteractionController: NSObject {
     }
   }
 
+  private func endTransitionWithoutAnimation(
+    _ transitionContext: UIViewControllerContextTransitioning,
+    cancelled: Bool
+  ) {
+    if let animator = animator as? ZoomAnimator {
+      animator.transitionView?.removeFromSuperview()
+      animator.transitionView = nil
+      animator.fromDelegate?.referenceView(for: animator)?.isHidden = false
+      animator.toDelegate?.referenceView(for: animator)?.isHidden = false
+    }
+
+    if cancelled {
+      transitionContext.cancelInteractiveTransition()
+    } else {
+      transitionContext.finishInteractiveTransition()
+    }
+
+    transitionContext.completeTransition(!cancelled)
+    self.transitionContext = nil
+  }
+
   func backgroundAlphaFor(view: UIView, withPanningVerticalDelta verticalDelta: CGFloat) -> CGFloat {
     let startingAlpha: CGFloat = 1.0
     let finalAlpha: CGFloat = 0.0
@@ -129,12 +169,24 @@ final class ZoomDismissalInteractionController: NSObject {
 
 extension ZoomDismissalInteractionController: UIViewControllerInteractiveTransitioning {
   func startInteractiveTransition(_ transitionContext: UIViewControllerContextTransitioning) {
-    guard let animator = animator as? ZoomAnimator else { return }
+    self.transitionContext = transitionContext
+
+    // A gesture that already finished will never call back, so cancel the dismissal instead of hanging.
+    if gestureFinishedBeforeTransitionStarted {
+      gestureFinishedBeforeTransitionStarted = false
+      endTransitionWithoutAnimation(transitionContext, cancelled: true)
+
+      return
+    }
+
+    guard let animator = animator as? ZoomAnimator else {
+      endTransitionWithoutAnimation(transitionContext, cancelled: true)
+
+      return
+    }
 
     animator.fromDelegate?.transitionWillStartWith(zoomAnimator: animator)
     animator.toDelegate?.transitionWillStartWith(zoomAnimator: animator)
-
-    self.transitionContext = transitionContext
 
     let containerView = transitionContext.containerView
 
@@ -143,7 +195,11 @@ extension ZoomDismissalInteractionController: UIViewControllerInteractiveTransit
       let toVC = transitionContext.viewController(forKey: .to),
       var fromReferenceViewFrame = animator.fromDelegate?.referenceViewFrameInTransitioningView(for: animator),
       let fromReferenceView = animator.fromDelegate?.referenceView(for: animator)
-    else { return }
+    else {
+      endTransitionWithoutAnimation(transitionContext, cancelled: true)
+
+      return
+    }
 
     fromReferenceViewFrame = fromReferenceViewFrame.containsNaN ? .zero : fromReferenceViewFrame
     self.fromReferenceViewFrame = fromReferenceViewFrame

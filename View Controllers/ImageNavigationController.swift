@@ -52,7 +52,7 @@ extension ImageNavigationController {
       transitionController.isInteractive = true
 
       presentingViewController?.dismiss(animated: true)
-    case .ended:
+    case .ended, .cancelled, .failed:
       if transitionController.isInteractive {
         currentViewController.scrollView.isScrollEnabled = true
         transitionController.isInteractive = false
