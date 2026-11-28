@@ -16,12 +16,15 @@ final class StatusTableViewCell: UITableViewCell {
   override func layoutSubviews() {
     super.layoutSubviews()
 
+    separatorInset.left = UIDevice.current.userInterfaceIdiom == .phone ? 0 : layoutMargins.left
+
     if viewModel?.configuration.hasReplyFollowing ?? false {
-      separatorInset.right = .greatestFiniteMagnitude
+      // Hide the separator by insetting it to zero width.
+      // Don't use `.greatestFiniteMagnitude` here: the separator view ends up that wide,
+      // which breaks the system's touch hit-testing for the whole window, so touches stop reaching the app.
+      separatorInset.right = max(bounds.width - separatorInset.left, 0)
     } else {
       separatorInset.right = UIDevice.current.userInterfaceIdiom == .phone ? 0 : layoutMargins.right
     }
-
-    separatorInset.left = UIDevice.current.userInterfaceIdiom == .phone ? 0 : layoutMargins.left
   }
 }
