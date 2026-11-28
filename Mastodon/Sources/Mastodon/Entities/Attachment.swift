@@ -47,6 +47,19 @@ public struct Attachment: Codable {
 extension Attachment {
   public typealias Id = String
 
+  /// The preview URL, if it can be loaded as an image.
+  /// Pleroma/Akkoma set `preview_url` to the media file itself for videos and audio without a thumbnail,
+  /// which would otherwise be downloaded in full and fed to the image decoder.
+  public var imagePreviewUrl: UnicodeURL? {
+    guard let previewUrl = previewUrl else { return nil }
+
+    if type != .image, let url = url, previewUrl.url == url.url {
+      return nil
+    }
+
+    return previewUrl
+  }
+
   public var aspectRatio: Double? {
     if let info = meta?.original,
       let width = info.width,

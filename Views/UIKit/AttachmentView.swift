@@ -193,7 +193,7 @@ extension AttachmentView {
       }
 
       imageView.sd_setImage(
-        with: viewModel.attachment.previewUrl?.url,
+        with: viewModel.attachment.imagePreviewUrl?.url,
         placeholderImage: placeholderImage
       ) { [weak self] _, _, _, _ in
         self?.layoutSubviews()

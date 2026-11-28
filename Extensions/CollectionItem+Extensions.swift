@@ -144,7 +144,7 @@ extension Account {
 extension Status {
   fileprivate func mediaPrefetchURLs(identityContext: IdentityContext) -> Set<URL> {
     displayStatus.account.mediaPrefetchURLs(identityContext: identityContext)
-      .union(displayStatus.mediaAttachments.compactMap(\.previewUrl?.url))
+      .union(displayStatus.mediaAttachments.compactMap(\.imagePreviewUrl?.url))
       .union(
         displayStatus.emojis.compactMap {
           (identityContext.appPreferences.animateCustomEmojis ? $0.url : $0.staticUrl).url
