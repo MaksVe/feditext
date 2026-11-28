@@ -20,7 +20,9 @@ class ReactionsCollectionView: UICollectionView {
   override func layoutSubviews() {
     super.layoutSubviews()
 
-    if bounds.size != intrinsicContentSize {
+    // Only compare heights: the intrinsic width is `noIntrinsicMetric`, so comparing sizes is never equal
+    // and would invalidate on every pass, causing an endless layout loop that starves touch handling.
+    if bounds.height != intrinsicContentSize.height {
       invalidateIntrinsicContentSize()
     }
   }
